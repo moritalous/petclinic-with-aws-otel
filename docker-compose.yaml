@@ -1,0 +1,41 @@
+version: '3'
+
+services:
+  petclinic:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - POSTGRES_URL=jdbc:postgresql://postgres/petclinic
+      - JAVA_TOOL_OPTIONS=-javaagent:/app/aws-opentelemetry-agent.jar
+      - OTEL_TRACES_SAMPLER=always_on
+      - OTEL_PROPAGATORS=tracecontext,baggage,xray
+      - OTEL_RESOURCE_ATTRIBUTES=service.name=petclinic
+      - OTEL_IMR_EXPORT_INTERVAL=10000
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://aws-otel-collector:4317
+      - OTEL_EXPORTER_OTLP_INSECURE=true
+    ports:
+      - "8080:8080"
+    command: [ "./mvnw", "spring-boot:run", "-Dspring-boot.run.profiles=postgres"]
+    depends_on:
+      - postgres
+      - aws-otel-collector
+
+  postgres:
+    image: postgres
+    environment:
+      - POSTGRES_PASSWORD=petclinic
+      - POSTGRES_USER=petclinic
+      - POSTGRES_DB=petclinic
+    ports:
+      - "5432:5432"
+
+  aws-otel-collector:
+    image: public.ecr.aws/aws-observability/aws-otel-collector:latest
+    environment:
+      - AWS_REGION=ap-northeast-1
+      - AWS_PROFILE=default
+    volumes:
+      - ./aws-otel-collector/config.yaml:/etc/otel-agent-config.yaml
+      - ./.aws:/root/.aws
+    command: ["--config=/etc/otel-agent-config.yaml"]
