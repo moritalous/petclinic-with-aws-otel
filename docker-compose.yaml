@@ -17,9 +17,15 @@ services:
     ports:
       - "8080:8080"
     command: [ "./mvnw", "spring-boot:run", "-Dspring-boot.run.profiles=postgres"]
+    logging:
+      driver: fluentd
+      options:
+        fluentd-address: "localhost:24224"
+        tag: "{{.Name}}"
     depends_on:
       - postgres
       - aws-otel-collector
+      - fluent-bit
 
   postgres:
     image: postgres
@@ -27,8 +33,15 @@ services:
       - POSTGRES_PASSWORD=petclinic
       - POSTGRES_USER=petclinic
       - POSTGRES_DB=petclinic
+    logging:
+      driver: fluentd
+      options:
+        fluentd-address: "localhost:24224"
+        tag: "{{.Name}}"
     ports:
       - "5432:5432"
+    depends_on:
+      - fluent-bit
 
   aws-otel-collector:
     image: public.ecr.aws/aws-observability/aws-otel-collector:latest
@@ -37,5 +50,21 @@ services:
       - AWS_PROFILE=default
     volumes:
       - ./aws-otel-collector/config.yaml:/etc/otel-agent-config.yaml
-      - ./.aws:/root/.aws
+      - ./.aws:/root/.aws:ro
     command: ["--config=/etc/otel-agent-config.yaml"]
+    logging:
+      driver: fluentd
+      options:
+        fluentd-address: "localhost:24224"
+        tag: "{{.Name}}"
+    depends_on:
+      - fluent-bit
+
+  fluent-bit:
+    image: cr.fluentbit.io/fluent/fluent-bit
+    volumes:
+        - ./fluent-bit/fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf
+        - ./.aws:/root/.aws:ro
+    ports:
+      - "24224:24224"
+      - "24224:24224/udp"
